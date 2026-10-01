@@ -1,78 +1,41 @@
-// Secure Dynamic Task Manager
-// All task content is built with createElement() and textContent only.
+// app.js — main module: task logic and event wiring
+// Safe DOM only: createElement() + textContent. No HTML-string injection.
 
-const EMPTY_MESSAGE = "Task cannot be empty";
-const SAMPLE_TASKS = [
-  "Review DOM selectors",
-  "Practice createElement",
-  "Study event delegation"
-];
+import {
+  EMPTY_MESSAGE,
+  TASK_STATES,
+  SAMPLE_TASKS,
+  TASK_BUTTONS,
+  generateTaskId
+} from "./data.js";
+import { isBlank, normalizeText, createElementWithClass, countByState } from "./utils.js";
+import { elements, showMessage, clearMessage, renderCounts } from "./display.js";
 
-// Cached DOM references
-const taskInput = document.getElementById("taskInput");
-const addTaskBtn = document.getElementById("addTaskBtn");
-const loadSamplesBtn = document.getElementById("loadSamplesBtn");
-const taskList = document.getElementById("taskList");
-const taskMessage = document.getElementById("taskMessage");
-const totalCount = document.getElementById("totalCount");
-const pendingCount = document.getElementById("pendingCount");
-const completedCount = document.getElementById("completedCount");
-
-let taskCounter = 0;
-
-// Generate a unique ID beginning with "task-"
-function generateTaskId() {
-  let id;
-  do {
-    taskCounter += 1;
-    id = "task-" + taskCounter;
-  } while (taskList.querySelector('[data-task-id="' + id + '"]'));
-  return id;
-}
-
-function showMessage(text) {
-  taskMessage.textContent = text;
-}
-
-function clearMessage() {
-  taskMessage.textContent = "";
-}
+const { taskInput, addTaskBtn, loadSamplesBtn, taskList } = elements;
 
 // Build one task <li>; does NOT attach it to #taskList
 function createTaskElement(taskText, taskId) {
   const li = document.createElement("li");
   li.classList.add("task-item");
   li.dataset.taskId = taskId;
-  li.dataset.state = "pending";
+  li.dataset.state = TASK_STATES.PENDING;
 
-  const span = document.createElement("span");
-  span.classList.add("task-text");
-  span.textContent = taskText;
+  const textSpan = createElementWithClass("span", "task-text", taskText);
+  const buttons = TASK_BUTTONS.map(({ className, label }) =>
+    createElementWithClass("button", className, label)
+  );
 
-  const completeBtn = document.createElement("button");
-  completeBtn.classList.add("complete-btn");
-  completeBtn.textContent = "Complete";
-
-  const editBtn = document.createElement("button");
-  editBtn.classList.add("edit-btn");
-  editBtn.textContent = "Edit";
-
-  const removeBtn = document.createElement("button");
-  removeBtn.classList.add("remove-btn");
-  removeBtn.textContent = "Remove";
-
-  li.append(span, completeBtn, editBtn, removeBtn);
+  li.append(textSpan, ...buttons);
   return li;
 }
 
 function addTask(taskText) {
-  const text = taskText.trim();
-  if (text === "") {
+  if (isBlank(taskText)) {
     showMessage(EMPTY_MESSAGE);
     return;
   }
 
-  const taskItem = createTaskElement(text, generateTaskId());
+  const taskItem = createTaskElement(normalizeText(taskText), generateTaskId());
   taskList.appendChild(taskItem);
   taskInput.value = "";
   clearMessage();
@@ -81,7 +44,7 @@ function addTask(taskText) {
 
 function toggleTaskComplete(taskItem) {
   const isCompleted = taskItem.classList.toggle("completed");
-  taskItem.dataset.state = isCompleted ? "completed" : "pending";
+  taskItem.dataset.state = isCompleted ? TASK_STATES.COMPLETED : TASK_STATES.PENDING;
   updateTaskCounts();
 }
 
@@ -105,19 +68,24 @@ function saveTaskEdit(taskItem) {
   const editBtn = taskItem.querySelector(".edit-btn");
   if (!editInput) return;
 
-  const newText = editInput.value.trim();
-  if (newText === "") {
+  if (isBlank(editInput.value)) {
     showMessage(EMPTY_MESSAGE);
     return;
   }
 
-  const newSpan = document.createElement("span");
-  newSpan.classList.add("task-text");
-  newSpan.textContent = newText;
-
+  const newSpan = createElementWithClass("span", "task-text", normalizeText(editInput.value));
   editInput.replaceWith(newSpan);
   editBtn.textContent = "Edit";
   clearMessage();
+}
+
+// The Edit button acts as Edit or Save depending on the current state
+function toggleTaskEdit(taskItem) {
+  if (taskItem.querySelector(".edit-input")) {
+    saveTaskEdit(taskItem);
+  } else {
+    beginTaskEdit(taskItem);
+  }
 }
 
 function removeTask(taskItem) {
@@ -127,38 +95,39 @@ function removeTask(taskItem) {
 
 // Counts are always calculated from the current DOM
 function updateTaskCounts() {
-  const total = taskList.querySelectorAll(".task-item").length;
-  const pending = taskList.querySelectorAll('.task-item[data-state="pending"]').length;
-  const completed = taskList.querySelectorAll('.task-item[data-state="completed"]').length;
-
-  totalCount.textContent = total;
-  pendingCount.textContent = pending;
-  completedCount.textContent = completed;
+  const items = Array.from(taskList.querySelectorAll(".task-item"));
+  renderCounts({
+    total: items.length,
+    pending: countByState(items, TASK_STATES.PENDING),
+    completed: countByState(items, TASK_STATES.COMPLETED)
+  });
 }
+
+// Object mapping a button class to its callback
+const TASK_ACTIONS = {
+  "complete-btn": toggleTaskComplete,
+  "edit-btn": toggleTaskEdit,
+  "remove-btn": removeTask
+};
 
 // Single delegated click handler for all task-level actions
 function handleTaskListClick(event) {
-  const target = event.target;
+  const { target } = event;
   const taskItem = target.closest(".task-item");
-  if (!taskItem || !taskList.contains(taskItem)) return;
+  if (!taskItem) return;
 
-  if (target.matches(".complete-btn")) {
-    toggleTaskComplete(taskItem);
-  } else if (target.matches(".edit-btn")) {
-    if (taskItem.querySelector(".edit-input")) {
-      saveTaskEdit(taskItem);
-    } else {
-      beginTaskEdit(taskItem);
-    }
-  } else if (target.matches(".remove-btn")) {
-    removeTask(taskItem);
+  const actionClass = Object.keys(TASK_ACTIONS).find((className) =>
+    target.classList.contains(className)
+  );
+  if (actionClass) {
+    TASK_ACTIONS[actionClass](taskItem);
   }
 }
 
 // Build all samples in a DocumentFragment, append once
 function loadSampleTasks() {
   const fragment = document.createDocumentFragment();
-  SAMPLE_TASKS.forEach(function (text) {
+  SAMPLE_TASKS.forEach((text) => {
     fragment.appendChild(createTaskElement(text, generateTaskId()));
   });
   taskList.appendChild(fragment);
@@ -168,15 +137,10 @@ function loadSampleTasks() {
 
 // Event wiring: exactly one click listener on #taskList
 taskList.addEventListener("click", handleTaskListClick);
-
-addTaskBtn.addEventListener("click", function () {
-  addTask(taskInput.value);
+addTaskBtn.addEventListener("click", () => addTask(taskInput.value));
+taskInput.addEventListener("keydown", ({ key }) => {
+  if (key === "Enter") addTask(taskInput.value);
 });
-
-taskInput.addEventListener("keydown", function (event) {
-  if (event.key === "Enter") addTask(taskInput.value);
-});
-
 loadSamplesBtn.addEventListener("click", loadSampleTasks);
 
 updateTaskCounts();
