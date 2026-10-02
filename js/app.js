@@ -8,7 +8,7 @@ import {
   TASK_BUTTONS,
   generateTaskId
 } from "./data.js";
-import { isBlank, normalizeText, createElementWithClass, countByState } from "./utils.js";
+import { isBlank, normalizeText, countByState } from "./utils.js";
 import { elements, showMessage, clearMessage, renderCounts } from "./display.js";
 
 const { taskInput, addTaskBtn, loadSamplesBtn, taskList } = elements;
@@ -20,10 +20,16 @@ function createTaskElement(taskText, taskId) {
   li.dataset.taskId = taskId;
   li.dataset.state = TASK_STATES.PENDING;
 
-  const textSpan = createElementWithClass("span", "task-text", taskText);
-  const buttons = TASK_BUTTONS.map(({ className, label }) =>
-    createElementWithClass("button", className, label)
-  );
+  const textSpan = document.createElement("span");
+  textSpan.classList.add("task-text");
+  textSpan.textContent = taskText;
+
+  const buttons = TASK_BUTTONS.map(({ className, label }) => {
+    const button = document.createElement("button");
+    button.classList.add(className);
+    button.textContent = label;
+    return button;
+  });
 
   li.append(textSpan, ...buttons);
   return li;
@@ -73,7 +79,9 @@ function saveTaskEdit(taskItem) {
     return;
   }
 
-  const newSpan = createElementWithClass("span", "task-text", normalizeText(editInput.value));
+  const newSpan = document.createElement("span");
+  newSpan.classList.add("task-text");
+  newSpan.textContent = normalizeText(editInput.value);
   editInput.replaceWith(newSpan);
   editBtn.textContent = "Edit";
   clearMessage();
@@ -112,12 +120,11 @@ const TASK_ACTIONS = {
 
 // Single delegated click handler for all task-level actions
 function handleTaskListClick(event) {
-  const { target } = event;
-  const taskItem = target.closest(".task-item");
+  const taskItem = event.target.closest(".task-item");
   if (!taskItem) return;
 
   const actionClass = Object.keys(TASK_ACTIONS).find((className) =>
-    target.classList.contains(className)
+    event.target.matches("." + className)
   );
   if (actionClass) {
     TASK_ACTIONS[actionClass](taskItem);
