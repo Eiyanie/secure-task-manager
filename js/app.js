@@ -150,4 +150,18 @@ taskInput.addEventListener("keydown", ({ key }) => {
 });
 loadSamplesBtn.addEventListener("click", loadSampleTasks);
 
+// Expose the required functions by name (module scope is otherwise private),
+// so they can be found and called from the page or the browser console.
+Object.assign(window, {
+  createTaskElement,
+  addTask,
+  toggleTaskComplete,
+  beginTaskEdit,
+  saveTaskEdit,
+  removeTask,
+  updateTaskCounts,
+  handleTaskListClick,
+  loadSampleTasks
+});
+
 updateTaskCounts();
